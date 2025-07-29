@@ -1,0 +1,13 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  potentially-malicious:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Leak ENV
+        run: |
+          echo "🔓 Leaking secrets"
+          env
