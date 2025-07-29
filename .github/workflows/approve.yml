@@ -1,0 +1,50 @@
+name: Pull Request Labeled
+
+on:
+  pull_request_target:
+    types:
+      - labeled
+
+jobs:
+  approve-workflow-run:
+    name: Approve CI
+    if: >
+      github.event_name == 'pull_request_target' &&
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'ci-approved'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Env
+        run: printenv
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Find Workflow Run ID
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set +e
+          echo "Found 'ci-approved' label on PR #$PR_NUMBER."
+          RUN_ID=$(gh run list -L 1 -c $SHA -s action_required -w CI --json databaseId --jq '.[].databaseId')
+          if [ -z "$RUN_ID" ]; then
+            echo "No workflow run found for SHA $SHA";
+            exit 0;
+          else
+            echo "Auto-approving workflow run $RUN_ID.";
+          fi;
+          echo "PR_NUMBER=$PR_NUMBER" >> "$GITHUB_ENV"
+          echo "RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+      - name: Approve Workflow Run
+        if: env.RUN_ID != ''
+        uses: ./.github/actions/gh-api-approve-run
+        with:
+          gh-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run_id: ${{ env.RUN_ID }}
+          pr_number: ${{ env.PR_NUMBER }}
+          commit_sha: ${{ github.event.pull_request.head.sha }}
